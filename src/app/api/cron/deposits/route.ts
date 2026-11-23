@@ -1,10 +1,12 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// 1. Init Supabase Admin (Bypasses RLS)
+// 1. Init Supabase Admin (Bypasses RLS) with safe fallback for build-time evaluation
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'),
+  (process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder'),
   {
     auth: {
       autoRefreshToken: false,

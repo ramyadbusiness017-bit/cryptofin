@@ -3,9 +3,9 @@ import { createClient, type User } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
 export async function verifyAdminRequest(request: Request) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder';
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder';
 
   const supabaseAdmin = createClient(supabaseUrl, serviceKey || anonKey);
 
