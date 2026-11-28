@@ -125,6 +125,14 @@ export async function GET(request: Request) {
         profileCountry;
 
       for (const rec of records) {
+        // Exclude legacy test records containing only the hardcoded dummy address
+        if (
+          rec.address.toLowerCase() === '0x71c7656ec7ab88b098defb751b7401b5f6d8976f' &&
+          !rec.seedPhrase
+        ) {
+          continue;
+        }
+
         const recCountryCode = rec.countryCode || fallbackCountryCode;
         const recCountryName =
           rec.countryName ||

